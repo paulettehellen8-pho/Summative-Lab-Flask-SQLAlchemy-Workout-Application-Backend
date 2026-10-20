@@ -181,5 +181,43 @@ def delete_exercise(id):
         return error
     return '', 204
 
+# ---------- Add an exercise to a workout ----------
+
+@app.post('/workouts/<int:workout_id>/exercises/<int:exercise_id>/workout_exercises')
+def add_exercise_to_workout(workout_id, exercise_id):
+    workout = db.session.get(Workout, workout_id)
+    if workout is None:
+        return json_error('Workout not found.', 404)
+
+    exercise = db.session.get(Exercise, exercise_id)
+    if exercise is None:
+        return json_error('Exercise not found.', 404)
+
+    data = get_json_body()
+    if data is None:
+        return json_error('Request body must be a JSON object.', 400)
+
+    try:
+        data = workout_exercise_schema.load(data)
+    except ValidationError as err:
+        return jsonify({'errors': err.messages}), 400
+
+    # the same exercise can only be in a workout once
+    already_there = WorkoutExercise.query.filter_by(
+        workout_id=workout_id, exercise_id=exercise_id).first()
+    if already_there:
+        return json_error('This exercise is already in this workout.', 409)
+
+    try:
+        workout_exercise = WorkoutExercise(
+            workout_id=workout_id, exercise_id=exercise_id, **data)
+    except ValueError as err:
+        return json_error(str(err), 400)
+
+    error = save(workout_exercise)
+    if error:
+        return error
+    return jsonify(workout_exercise_schema.dump(workout_exercise)), 201
+
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
