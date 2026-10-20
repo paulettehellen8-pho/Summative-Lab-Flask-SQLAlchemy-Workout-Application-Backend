@@ -163,66 +163,59 @@ class Workout(db.Model):
 class WorkoutExercise(db.Model):
     __tablename__ = 'workout_exercises'
 
-    # Database constraints
     __table_args__ = (
-        UniqueConstraint(
-            'workout_id',
-            'exercise_id',
-            name='unique_exercise_per_workout'
-        ),
-        CheckConstraint(
-            'reps IS NULL OR reps > 0',
-            name='check_reps_positive'
-        ),
-        CheckConstraint(
-            'sets IS NULL OR sets > 0',
-            name='check_sets_positive'
-        ),
-        CheckConstraint(
-            'duration_seconds IS NULL OR duration_seconds > 0',
-            name='check_duration_seconds_positive'
-        ),
+        # The same exercise can't be added to the same workout twice
+        db.UniqueConstraint('workout_id', 'exercise_id',
+                            name='uq_workout_exercise_pair'),
+        # Numbers have to be positive when they are given
+        db.CheckConstraint('reps IS NULL OR reps > 0',
+                           name='ck_we_reps_positive'),
+        db.CheckConstraint('sets IS NULL OR sets > 0',
+                           name='ck_we_sets_positive'),
+        db.CheckConstraint('duration_seconds IS NULL OR duration_seconds > 0',
+                           name='ck_we_duration_positive'),
+        # Every row needs reps or a duration, otherwise it says nothing
+        db.CheckConstraint('reps IS NOT NULL OR duration_seconds IS NOT NULL',
+                           name='ck_we_needs_reps_or_duration'),
+        # If reps are given then sets must be given too
+        db.CheckConstraint('reps IS NULL OR sets IS NOT NULL',
+                           name='ck_we_reps_need_sets'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
-
-    workout_id = db.Column(
-        db.Integer,
-        db.ForeignKey('workouts.id'),
-        nullable=False
-    )
-
-    exercise_id = db.Column(
-        db.Integer,
-        db.ForeignKey('exercises.id'),
-        nullable=False
-    )
-
+    workout_id = db.Column(db.Integer, db.ForeignKey('workouts.id'),
+                           nullable=False)
+    exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.id'),
+                            nullable=False)
     reps = db.Column(db.Integer)
     sets = db.Column(db.Integer)
     duration_seconds = db.Column(db.Integer)
 
-    # Relationships
-    workout = db.relationship(
-        'Workout',
-        back_populates='workout_exercises'
-    )
+    # A WorkoutExercise belongs to a Workout and to an Exercise
+    workout = db.relationship('Workout', back_populates='workout_exercises')
+    exercise = db.relationship('Exercise', back_populates='workout_exercises')
 
-    exercise = db.relationship(
-        'Exercise',
-        back_populates='workout_exercises'
-    )
+    # These three are optional, so None is allowed. Anything else is checked.
+    @validates('reps')
+    def validate_reps(self, key, value):
+        if value is None:
+            return value
+        return check_whole_number('reps', value, 1000)
 
-    # Model validation
-    @validates('reps', 'sets', 'duration_seconds')
-    def validate_positive_values(self, key, value):
-        if value is not None and value <= 0:
-            raise ValueError(
-                f'{key} must be greater than zero.'
-            )
+    @validates('sets')
+    def validate_sets(self, key, value):
+        if value is None:
+            return value
+        return check_whole_number('sets', value, 100)
 
-        return value
+    @validates('duration_seconds')
+    def validate_duration_seconds(self, key, value):
+        if value is None:
+            return value
+        return check_whole_number('duration_seconds', value, 86400)
 
+    def __repr__(self):
+        return f'<WorkoutExercise {self.id}: workout {self.workout_id}, exercise {self.exercise_id}>'
 
 
 
