@@ -123,5 +123,63 @@ def delete_workout(id):
         return error
     return '', 204
 
+
+# ---------- Exercises ----------
+
+@app.get('/exercises')
+def get_exercises():
+    exercises = Exercise.query.order_by(Exercise.name).all()
+    return jsonify(exercises_schema.dump(exercises)), 200
+
+
+@app.get('/exercises/<int:id>')
+def get_exercise(id):
+    exercise = db.session.get(Exercise, id)
+    if exercise is None:
+        return json_error('Exercise not found.', 404)
+    return jsonify(exercise_schema.dump(exercise)), 200
+
+
+@app.post('/exercises')
+def create_exercise():
+    data = get_json_body()
+    if data is None:
+        return json_error('Request body must be a JSON object.', 400)
+
+    try:
+        data = exercise_schema.load(data)
+    except ValidationError as err:
+        return jsonify({'errors': err.messages}), 400
+
+    # "Squats" and "squats" should count as the same exercise
+    name = data['name'].strip()
+    duplicate = Exercise.query.filter(
+        db.func.lower(Exercise.name) == name.lower()).first()
+    if duplicate:
+        return json_error(f'An exercise called "{duplicate.name}" already exists.', 409)
+
+    try:
+        exercise = Exercise(**data)
+    except ValueError as err:
+        return json_error(str(err), 400)
+
+    error = save(exercise)
+    if error:
+        return error
+    return jsonify(exercise_schema.dump(exercise)), 201
+
+
+@app.delete('/exercises/<int:id>')
+def delete_exercise(id):
+    exercise = db.session.get(Exercise, id)
+    if exercise is None:
+        return json_error('Exercise not found.', 404)
+
+    # the cascade on the model also deletes this exercise's WorkoutExercises
+    error = remove(exercise)
+    if error:
+        return error
+    return '', 204
+
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
