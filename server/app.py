@@ -72,5 +72,56 @@ def handle_http_error(error):
     db.session.rollback()
     return json_error(error.description, error.code)
 
+# ---------- Workouts ----------
+
+@app.get('/workouts')
+def get_workouts():
+    workouts = Workout.query.order_by(Workout.date, Workout.id).all()
+    return jsonify(workouts_schema.dump(workouts)), 200
+
+
+@app.get('/workouts/<int:id>')
+def get_workout(id):
+    workout = db.session.get(Workout, id)
+    if workout is None:
+        return json_error('Workout not found.', 404)
+    return jsonify(workout_schema.dump(workout)), 200
+
+
+@app.post('/workouts')
+def create_workout():
+    data = get_json_body()
+    if data is None:
+        return json_error('Request body must be a JSON object.', 400)
+
+    try:
+        data = workout_schema.load(data)
+    except ValidationError as err:
+        return jsonify({'errors': err.messages}), 400
+
+    try:
+        workout = Workout(**data)
+    except ValueError as err:
+        # the model validations are a second safety net
+        return json_error(str(err), 400)
+
+    error = save(workout)
+    if error:
+        return error
+    return jsonify(workout_schema.dump(workout)), 201
+
+
+@app.delete('/workouts/<int:id>')
+def delete_workout(id):
+    workout = db.session.get(Workout, id)
+    if workout is None:
+        return json_error('Workout not found.', 404)
+
+    # the cascade on the model also deletes this workout's WorkoutExercises
+    error = remove(workout)
+    if error:
+        return error
+    return '', 204
+
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
